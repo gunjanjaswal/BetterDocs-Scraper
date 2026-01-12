@@ -1,4 +1,4 @@
-# Knowledge Base Web Scraper
+# Knowledge Base BetterDocs Web Scraper
 
 A Python web scraper designed to extract all content from BetterDocs-powered documentation websites. Automatically discovers categories and articles, then exports data in JSON, Markdown, and CSV formats.
 
