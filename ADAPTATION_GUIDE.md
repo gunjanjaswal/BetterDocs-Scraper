@@ -255,4 +255,4 @@ If you're having trouble adapting the scraper:
 3. Include any error messages
 4. Show the HTML structure of the problematic elements
 
-Open an issue on GitHub with this information, and we'll help you adapt it!
+Open an issue on GitHub with this information, and I'll help you adapt it!
