@@ -1,4 +1,4 @@
-# Knowledge Base BetterDocs Web Scraper
+# Knowledge Base Web Scraper
 
 A Python web scraper designed to extract all content from BetterDocs-powered documentation websites. Automatically discovers categories and articles, then exports data in JSON, Markdown, and CSV formats.
 
@@ -64,11 +64,11 @@ The scraper will:
 ✅ Found 13 categories
 
 📚 Processing categories: 100%|████████████| 13/13
-  📄 Category Name: 100%|████████████| 39/39
+  📄 Category Name: 100%|████████████| 6/6
 
 ✅ Scraping complete!
    Categories: 13
-   Total Articles: 507
+   Total Articles: 39
 
 📦 Exporting data...
 
@@ -84,25 +84,27 @@ The scraper will:
 ## 📁 Output Formats
 
 ### JSON (`output/knowledge_base.json`)
-Structured JSON containing all categories and articles:
+Structured JSON containing all categories and articles (URLs excluded by default):
 ```json
 {
-  "base_url": "https://your-docs-site.com",
   "categories": [
     {
       "name": "Category Name",
-      "url": "https://...",
       "articles": [
         {
           "title": "Article Title",
-          "url": "https://...",
-          "category": "Category Name",
+          "parent_category": "Category Name",
           "content": "Full article content..."
         }
       ]
     }
   ]
 }
+```
+
+**Note**: URLs are excluded by default. To include them, use:
+```python
+scraper.export_all(include_urls=True)
 ```
 
 ### Markdown (`output/markdown/`)
@@ -119,12 +121,19 @@ output/markdown/
 
 Each markdown file contains:
 - Article title
-- Category and URL metadata
+- Parent category name
 - Full article content
 
+**Note**: URLs are excluded by default. To include them in markdown files, use `include_urls=True`.
+
 ### CSV (`output/knowledge_base.csv`)
-Tabular format with columns:
-- Category
+Tabular format with columns (URLs excluded by default):
+- Parent Category
+- Title
+- Content
+
+**With URLs enabled** (`include_urls=True`):
+- Parent Category
 - Title
 - URL
 - Content
@@ -145,6 +154,9 @@ time.sleep(0.5)  # Between articles
 
 # Change output directory
 scraper.export_all(output_dir="custom_output")
+
+# Include URLs in exports (excluded by default)
+scraper.export_all(include_urls=True)
 
 # Modify retry attempts
 html = self.get_page(url, retries=5)
@@ -170,9 +182,9 @@ knowledge-base-scraper/
 3. **Content Scraping**: Visits each article page and extracts:
    - Title
    - Full text content
-   - URL
-   - Category information
-4. **Export**: Saves data in JSON, Markdown, and CSV formats
+   - Parent category information
+   - URL (optional)
+4. **Export**: Saves data in JSON, Markdown, and CSV formats (URLs excluded by default)
 
 ## 🔧 Using with Your BetterDocs Site
 
@@ -232,12 +244,12 @@ See the **[ADAPTATION_GUIDE.md](ADAPTATION_GUIDE.md)** for detailed instructions
 
 ## 📊 Performance
 
-- **Scraping Speed**: ~9 minutes for 507 articles (with rate limiting)
+- **Scraping Speed**: Varies by site size (e.g., ~1-2 minutes for 39 articles)
 - **Memory Usage**: Minimal - processes articles sequentially
-- **Output Size**: 
-  - JSON: ~592 KB
-  - CSV: ~520 KB
-  - Markdown: 507 individual files
+- **Output Size**: Depends on content volume
+  - JSON: Compact without URLs
+  - CSV: Lightweight tabular format
+  - Markdown: Individual files per article
 
 ## 🤝 Contributing
 

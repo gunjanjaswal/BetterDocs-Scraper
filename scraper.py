@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Knowledge Base Web Scraper
-Scrapes all content from https://knowledgebase.believersdestination.com/docs/
+Scrapes all content from BetterDocs-powered documentation websites
 """
 
 import requests
@@ -57,21 +57,44 @@ class KnowledgeBaseScraper:
         soup = BeautifulSoup(html, 'lxml')
         categories = []
         
-        # Find all category cards - they typically have "Explore More" buttons
-        category_links = soup.find_all('a', href=lambda x: x and '/docs-category/' in x)
+        # Find all category cards - BetterDocs uses specific structure
+        category_cards = soup.find_all('article', class_='betterdocs-single-category-wrapper')
         
-        seen_urls = set()
-        for link in category_links:
-            url = urljoin(self.base_url, link.get('href'))
-            if url not in seen_urls:
-                seen_urls.add(url)
-                # Extract category name from URL or link text
-                category_name = link.get_text(strip=True) or url.split('/')[-2]
-                categories.append({
-                    'name': category_name,
-                    'url': url,
-                    'articles': []
-                })
+        if not category_cards:
+            # Fallback: try finding category links directly
+            category_links = soup.find_all('a', href=lambda x: x and '/docs-category/' in x)
+            seen_urls = set()
+            for link in category_links:
+                url = urljoin(self.base_url, link.get('href'))
+                if url not in seen_urls:
+                    seen_urls.add(url)
+                    category_name = link.get_text(strip=True) or url.split('/')[-2]
+                    if category_name and category_name.lower() not in ['explore more', 'read more', 'view all']:
+                        categories.append({
+                            'name': category_name,
+                            'url': url,
+                            'articles': []
+                        })
+        else:
+            # Extract from category cards (preferred method)
+            seen_urls = set()
+            for card in category_cards:
+                # Get the category title from the title element
+                title_elem = card.find(class_='betterdocs-category-title')
+                category_name = title_elem.get_text(strip=True) if title_elem else None
+                
+                # Get the category URL from the link
+                link = card.find('a', href=lambda x: x and '/docs-category/' in x)
+                
+                if link and category_name:
+                    url = urljoin(self.base_url, link.get('href'))
+                    if url not in seen_urls:
+                        seen_urls.add(url)
+                        categories.append({
+                            'name': category_name,
+                            'url': url,
+                            'articles': []
+                        })
         
         print(f"✅ Found {len(categories)} categories")
         return categories
@@ -85,20 +108,67 @@ class KnowledgeBaseScraper:
         soup = BeautifulSoup(html, 'lxml')
         articles = []
         
-        # Find all article links
-        article_links = soup.find_all('a', href=lambda x: x and '/docs/' in x and '/docs-category/' not in x)
+        # Get the page title to know which category we're on
+        h1 = soup.find('h1')
+        page_title = h1.get_text(strip=True) if h1 else ""
+        
+        # Find all category wrappers
+        all_wrappers = soup.find_all(class_='betterdocs-single-category-wrapper')
+        
+        if all_wrappers:
+            # Find the wrapper that matches the current page
+            # The correct wrapper will have a title matching the H1 or be marked as active/show
+            target_wrapper = None
+            
+            for wrapper in all_wrappers:
+                # Check if this wrapper has the active or show class
+                wrapper_classes = wrapper.get('class', [])
+                if 'active' in wrapper_classes or 'show' in wrapper_classes:
+                    target_wrapper = wrapper
+                    break
+                
+                # Fallback: match by title
+                title_elem = wrapper.find(class_='betterdocs-category-title')
+                if title_elem:
+                    wrapper_title = title_elem.get_text(strip=True)
+                    if wrapper_title and wrapper_title in page_title:
+                        target_wrapper = wrapper
+                        break
+            
+            if target_wrapper:
+                # Get articles from this specific wrapper
+                article_list = target_wrapper.find('ul', class_='betterdocs-articles-list')
+                if article_list:
+                    article_links = article_list.find_all('a', href=lambda x: x and '/docs/' in x)
+                else:
+                    article_links = []
+            else:
+                # If no match found, use the first list (fallback)
+                article_list = soup.find('ul', class_='betterdocs-articles-list')
+                if article_list:
+                    article_links = article_list.find_all('a', href=lambda x: x and '/docs/' in x)
+                else:
+                    article_links = []
+        else:
+            # No wrappers found, try direct article list
+            article_list = soup.find('ul', class_='betterdocs-articles-list')
+            if article_list:
+                article_links = article_list.find_all('a', href=lambda x: x and '/docs/' in x)
+            else:
+                # Last resort
+                article_links = soup.find_all('a', href=lambda x: x and '/docs/' in x and '/docs-category/' not in x)
         
         seen_urls = set()
         for link in article_links:
             url = urljoin(self.base_url, link.get('href'))
             # Avoid duplicates and the main docs page
-            if url not in seen_urls and url != self.docs_url:
+            if url not in seen_urls and url != self.docs_url and '/docs-category/' not in url:
                 seen_urls.add(url)
                 articles.append(url)
         
         return articles
     
-    def extract_article_content(self, article_url, category_name):
+    def extract_article_content(self, article_url, parent_category_name):
         """Extract content from an article page"""
         html = self.get_page(article_url)
         if not html:
@@ -135,7 +205,7 @@ class KnowledgeBaseScraper:
         return {
             'title': title_text,
             'url': article_url,
-            'category': category_name,
+            'parent_category': parent_category_name,
             'content': content_text,
             'html': content_html
         }
@@ -175,30 +245,42 @@ class KnowledgeBaseScraper:
         
         return self.data
     
-    def export_json(self, output_dir="output"):
+    def export_json(self, output_dir="output", include_urls=False):
         """Export data as JSON"""
         Path(output_dir).mkdir(exist_ok=True)
         filepath = Path(output_dir) / "knowledge_base.json"
         
         # Create a clean version without HTML
         clean_data = {
-            "base_url": self.data["base_url"],
             "categories": []
         }
+        
+        # Optionally include base_url
+        if include_urls:
+            clean_data["base_url"] = self.data["base_url"]
         
         for category in self.data['categories']:
             clean_category = {
                 "name": category['name'],
-                "url": category['url'],
                 "articles": []
             }
+            
+            # Optionally include category URL
+            if include_urls:
+                clean_category["url"] = category['url']
+            
             for article in category['articles']:
-                clean_category['articles'].append({
+                article_data = {
                     'title': article['title'],
-                    'url': article['url'],
-                    'category': article['category'],
+                    'parent_category': article['parent_category'],
                     'content': article['content']
-                })
+                }
+                
+                # Optionally include article URL
+                if include_urls:
+                    article_data['url'] = article['url']
+                
+                clean_category['articles'].append(article_data)
             clean_data['categories'].append(clean_category)
         
         with open(filepath, 'w', encoding='utf-8') as f:
@@ -206,7 +288,7 @@ class KnowledgeBaseScraper:
         
         print(f"💾 JSON exported to: {filepath}")
     
-    def export_markdown(self, output_dir="output"):
+    def export_markdown(self, output_dir="output", include_urls=False):
         """Export articles as individual markdown files organized by category"""
         base_path = Path(output_dir) / "markdown"
         base_path.mkdir(parents=True, exist_ok=True)
@@ -224,10 +306,20 @@ class KnowledgeBaseScraper:
                 filepath = category_path / f"{filename}.md"
                 
                 # Create markdown content
-                md_content = f"""# {article['title']}
+                if include_urls:
+                    md_content = f"""# {article['title']}
 
-**Category:** {article['category']}  
+**Parent Category:** {article['parent_category']}  
 **URL:** {article['url']}
+
+---
+
+{article['content']}
+"""
+                else:
+                    md_content = f"""# {article['title']}
+
+**Parent Category:** {article['parent_category']}
 
 ---
 
@@ -239,32 +331,44 @@ class KnowledgeBaseScraper:
         
         print(f"💾 Markdown files exported to: {base_path}")
     
-    def export_csv(self, output_dir="output"):
+    def export_csv(self, output_dir="output", include_urls=False):
         """Export data as CSV"""
         Path(output_dir).mkdir(exist_ok=True)
         filepath = Path(output_dir) / "knowledge_base.csv"
         
         with open(filepath, 'w', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
-            writer.writerow(['Category', 'Title', 'URL', 'Content'])
+            
+            # Header row based on include_urls setting
+            if include_urls:
+                writer.writerow(['Category', 'Title', 'URL', 'Content'])
+            else:
+                writer.writerow(['Category', 'Title', 'Content'])
             
             for category in self.data['categories']:
                 for article in category['articles']:
-                    writer.writerow([
-                        article['category'],
-                        article['title'],
-                        article['url'],
-                        article['content']
-                    ])
+                    if include_urls:
+                        writer.writerow([
+                            article['parent_category'],
+                            article['title'],
+                            article['url'],
+                            article['content']
+                        ])
+                    else:
+                        writer.writerow([
+                            article['parent_category'],
+                            article['title'],
+                            article['content']
+                        ])
         
         print(f"💾 CSV exported to: {filepath}")
     
-    def export_all(self, output_dir="output"):
+    def export_all(self, output_dir="output", include_urls=False):
         """Export in all formats"""
         print(f"\n📦 Exporting data...\n")
-        self.export_json(output_dir)
-        self.export_markdown(output_dir)
-        self.export_csv(output_dir)
+        self.export_json(output_dir, include_urls=include_urls)
+        self.export_markdown(output_dir, include_urls=include_urls)
+        self.export_csv(output_dir, include_urls=include_urls)
         print(f"\n✅ All exports complete!")
 
 
@@ -276,7 +380,7 @@ def main():
     # Scrape all content
     scraper.scrape_all()
     
-    # Export in all formats
+    # Export in all formats (URLs will be optional)
     scraper.export_all()
     
     print("\n🎉 Done! Check the 'output' folder for results.")
