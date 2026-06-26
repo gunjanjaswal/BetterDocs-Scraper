@@ -161,7 +161,7 @@ Python web scraper for BetterDocs documentation sites. Auto-discovers content an
 If you're having trouble, you can:
 1. Check GitHub's official documentation: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/classifying-your-repository-with-topics
 2. Open an issue on this repository
-3. Contact me via the Buy Me a Coffee link in the README
+3. Contact me via the Ko-fi link in the README
 
 ---
 

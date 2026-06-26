@@ -265,9 +265,9 @@ This scraper is intended for personal use and educational purposes. Always respe
 
 ## ☕ Support
 
-If you find this tool useful, consider buying me a coffee!
+If you find this tool useful, consider supporting development on Ko-fi!
 
-[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-Support-yellow?style=for-the-badge&logo=buy-me-a-coffee)](https://buymeacoffee.com/gunjanjaswal)
+[![Support on Ko-fi](https://img.shields.io/badge/Ko--fi-Support-FF5E5B?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/gunjanjaswal)
 
 Your support helps me create more open-source tools! 🙏
 
